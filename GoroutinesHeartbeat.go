@@ -63,18 +63,6 @@ func New(
 	return app
 }
 
-func (a *App) Test() {
-	a.logger.Log("test", "INFO")
-}
-
-// Заменить на сохранение в БД
-/*func updateStatus(id int, status string, t time.Time) {
-	log.Printf("Task %d %s at %s\n", id, status, t.Format(time.RFC3339))
-	if id == 1 {
-		panic(1)
-	}
-}*/
-
 func (a *App) taskHeartbeat(
 	ctx context.Context,
 	id int,
@@ -164,7 +152,7 @@ func (a *App) ensureHeartbeat(
 	}
 }
 
-func (a *App) longTask(
+func (a *App) RunTasks(
 	ctx context.Context,
 	id int,
 	wg *sync.WaitGroup,
@@ -211,30 +199,3 @@ func (a *App) longTask(
 		id)
 	a.logger.Log(msg, "INFO")
 }
-
-/*
-// Заменить на задание на сервере
-func serverTask(id int) {
-	time.Sleep(15 * time.Second)
-	log.Printf("✅ Task %d finished\n", id)
-}
-
-func main() {
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var wg sync.WaitGroup
-
-	const tasks = 5
-
-	for i := 1; i <= tasks; i++ {
-		wg.Add(1)
-		go longTask(ctx, i, &wg)
-	}
-
-	wg.Wait()
-
-	log.Println("All tasks completed")
-}
-*/
