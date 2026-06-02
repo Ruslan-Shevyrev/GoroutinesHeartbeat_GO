@@ -27,6 +27,22 @@ type Status interface {
 		logger Logger)
 }
 
+type StatusFunc func(
+	id int,
+	status string,
+	t time.Time,
+	logger Logger,
+)
+
+func (f StatusFunc) updateStatus(
+	id int,
+	status string,
+	t time.Time,
+	logger Logger,
+) {
+	f(id, status, t, logger)
+}
+
 type defaultStatus struct{}
 
 func (defaultStatus) updateStatus(
