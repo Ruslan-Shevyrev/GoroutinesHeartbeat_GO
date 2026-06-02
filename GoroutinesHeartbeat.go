@@ -22,6 +22,18 @@ type App struct {
 	logger Logger
 }
 
+func New(logger Logger) *App {
+	app := &App{}
+
+	if logger == nil {
+		app.logger = defaultLogger{}
+	} else {
+		app.logger = logger
+	}
+
+	return app
+}
+
 func (a *App) Test() {
 	a.logger.Log("test", "INFO")
 }
