@@ -32,7 +32,7 @@ func (defaultStatus) updateStatus(id int, status string, t time.Time) {
 	}
 }
 
-type TaskFunc func(id int)
+type TaskFunc func(id int, logger Logger)
 
 type App struct {
 	logger Logger
@@ -191,7 +191,7 @@ func (a *App) longTask(
 	)
 
 	for _, task := range a.tasks {
-		task(id)
+		task(id, a.logger)
 		// проверяем heartbeat
 		a.ensureHeartbeat(
 			hbCtx,
