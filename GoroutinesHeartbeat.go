@@ -20,13 +20,30 @@ func (defaultLogger) Log(message, level string) {
 }
 
 type Status interface {
-	updateStatus(id int, status string, t time.Time)
+	updateStatus(
+		id int,
+		status string,
+		t time.Time,
+		logger Logger)
 }
 
 type defaultStatus struct{}
 
-func (defaultStatus) updateStatus(id int, status string, t time.Time) {
-	log.Printf("[DEFAULT] Task id: %d Task status: %s Task time: %s\n", id, status, t.Format(time.RFC3339))
+func (defaultStatus) updateStatus(
+	id int,
+	status string,
+	t time.Time,
+	logger Logger,
+) {
+	logger.Log(
+		fmt.Sprintf(
+			"[DEFAULT] Task id: %d Task status: %s Task time: %s",
+			id,
+			status,
+			t.Format(time.RFC3339),
+		),
+		"INFO",
+	)
 	if id == 1 {
 		panic(1)
 	}
@@ -75,11 +92,11 @@ func (a *App) taskHeartbeat(
 		select {
 		case <-ctx.Done():
 			t := <-ticker.C
-			a.status.updateStatus(id, "STOPPED", t)
+			a.status.updateStatus(id, "STOPPED", t, a.logger)
 			return
 
 		case t := <-ticker.C:
-			a.status.updateStatus(id, "RUNNING", t)
+			a.status.updateStatus(id, "RUNNING", t, a.logger)
 		}
 	}
 }
