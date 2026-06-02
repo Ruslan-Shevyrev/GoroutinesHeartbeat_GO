@@ -1,11 +1,12 @@
 package goroutinesheartbeat
 
 import (
-	//"context"
+	"context"
+	"fmt"
 	"log"
-	//"runtime/debug"
-	//"sync"
-	//"time"
+	"runtime/debug"
+	"sync"
+	"time"
 )
 
 type Logger interface {
@@ -15,14 +16,35 @@ type Logger interface {
 type defaultLogger struct{}
 
 func (defaultLogger) Log(message, level string) {
-	log.Printf("[DEFAULT %s] %s\n", level, message)
+	log.Printf("[DEFAULT] level: %s message: %s\n", level, message)
 }
+
+type Status interface {
+	updateStatus(id int, status string, t time.Time)
+}
+
+type defaultStatus struct{}
+
+func (defaultStatus) updateStatus(id int, status string, t time.Time) {
+	log.Printf("[DEFAULT] Task id: %d Task status: %s Task time: %s\n", id, status, t.Format(time.RFC3339))
+	if id == 1 {
+		panic(1)
+	}
+}
+
+type TaskFunc func(id int)
 
 type App struct {
 	logger Logger
+	status Status
+	tasks  []TaskFunc
 }
 
-func New(logger Logger) *App {
+func New(
+	logger Logger,
+	status Status,
+	tasks []TaskFunc,
+) *App {
 	app := &App{}
 
 	if logger == nil {
@@ -31,6 +53,13 @@ func New(logger Logger) *App {
 		app.logger = logger
 	}
 
+	if status == nil {
+		app.status = defaultStatus{}
+	} else {
+		app.status = status
+	}
+
+	app.tasks = tasks
 	return app
 }
 
@@ -38,8 +67,18 @@ func (a *App) Test() {
 	a.logger.Log("test", "INFO")
 }
 
-/*
-func taskHeartbeat(ctx context.Context, id int) {
+// Заменить на сохранение в БД
+/*func updateStatus(id int, status string, t time.Time) {
+	log.Printf("Task %d %s at %s\n", id, status, t.Format(time.RFC3339))
+	if id == 1 {
+		panic(1)
+	}
+}*/
+
+func (a *App) taskHeartbeat(
+	ctx context.Context,
+	id int,
+) {
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -48,16 +87,16 @@ func taskHeartbeat(ctx context.Context, id int) {
 		select {
 		case <-ctx.Done():
 			t := <-ticker.C
-			updateStatus(id, "STOPPED", t)
+			a.status.updateStatus(id, "STOPPED", t)
 			return
 
 		case t := <-ticker.C:
-			updateStatus(id, "RUNNING", t)
+			a.status.updateStatus(id, "RUNNING", t)
 		}
 	}
 }
 
-func startHeartbeat(
+func (a *App) startHeartbeat(
 	ctx context.Context,
 	id int,
 	errCh chan<- error,
@@ -74,38 +113,42 @@ func startHeartbeat(
 
 				err := fmt.Errorf("%v", r)
 
-				log.Printf(
+				msg := fmt.Sprintf(
 					"heartbeat panic recovered: %v\n%s",
 					err,
-					debug.Stack(),
-				)
+					debug.Stack())
+				a.logger.Log(msg, "ERROR")
 
 				errCh <- err
 			}
 		}()
 
-		taskHeartbeat(ctx, id)
+		a.taskHeartbeat(ctx, id)
 	}()
 }
 
-func ensureHeartbeat(ctx context.Context, id int, errCh chan error, wg *sync.WaitGroup,
+func (a *App) ensureHeartbeat(
+	ctx context.Context,
+	id int,
+	errCh chan error,
+	wg *sync.WaitGroup,
 ) {
 	select {
 
 	case err := <-errCh:
 
-		log.Printf(
-			"Heartbeat crashed for task %d: %v",
+		msg := fmt.Sprintf("Heartbeat crashed for task %d: %v",
 			id,
-			err,
-		)
+			err)
 
-		log.Printf(
-			"Restarting heartbeat for task %d",
-			id,
-		)
+		a.logger.Log(msg, "WARNING")
 
-		startHeartbeat(
+		msg = fmt.Sprintf("Restarting heartbeat for task %d",
+			id)
+
+		a.logger.Log(msg, "WARNING")
+
+		a.startHeartbeat(
 			ctx,
 			id,
 			errCh,
@@ -114,22 +157,14 @@ func ensureHeartbeat(ctx context.Context, id int, errCh chan error, wg *sync.Wai
 
 	default:
 
-		log.Printf(
-			"Heartbeat alive for task %d",
-			id,
-		)
+		msg := fmt.Sprintf("Heartbeat alive for task %d",
+			id)
+
+		a.logger.Log(msg, "INFO")
 	}
 }
 
-// Заменить на сохранение в БД
-func updateStatus(id int, status string, t time.Time) {
-	log.Printf("Task %d %s at %s\n", id, status, t.Format(time.RFC3339))
-	if id == 1 {
-		panic(1)
-	}
-}
-
-func longTask(
+func (a *App) longTask(
 	ctx context.Context,
 	id int,
 	wg *sync.WaitGroup,
@@ -148,34 +183,23 @@ func longTask(
 	errCh := make(chan error, 1)
 
 	// старт heartbeat
-	startHeartbeat(
+	a.startHeartbeat(
 		hbCtx,
 		id,
 		errCh,
 		&hbWG,
 	)
 
-	// работа №1
-	serverTask(id)
-
-	// проверяем heartbeat
-	ensureHeartbeat(
-		hbCtx,
-		id,
-		errCh,
-		&hbWG,
-	)
-
-	// работа №2
-	serverTask(id)
-
-	// ещё раз проверяем heartbeat
-	ensureHeartbeat(
-		hbCtx,
-		id,
-		errCh,
-		&hbWG,
-	)
+	for _, task := range a.tasks {
+		task(id)
+		// проверяем heartbeat
+		a.ensureHeartbeat(
+			hbCtx,
+			id,
+			errCh,
+			&hbWG,
+		)
+	}
 
 	// останавливаем heartbeat
 	hbCancel()
@@ -183,12 +207,12 @@ func longTask(
 	// ждём завершения heartbeat goroutines
 	hbWG.Wait()
 
-	log.Printf(
-		"Task %d completed\n",
-		id,
-	)
+	msg := fmt.Sprintf("Task %d completed\n",
+		id)
+	a.logger.Log(msg, "INFO")
 }
 
+/*
 // Заменить на задание на сервере
 func serverTask(id int) {
 	time.Sleep(15 * time.Second)
@@ -212,4 +236,5 @@ func main() {
 	wg.Wait()
 
 	log.Println("All tasks completed")
-}*/
+}
+*/
