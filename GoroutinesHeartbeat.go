@@ -152,50 +152,42 @@ func (a *App) ensureHeartbeat(
 	}
 }
 
-func (a *App) RunTasks(
-	ctx context.Context,
-	id int,
-	wg *sync.WaitGroup,
-) {
-	defer wg.Done()
+func (a *App) RunTask(id int) {
+	go func() {
+		ctx := context.Background()
 
-	log.Printf("Task %d started\n", id)
+		a.logger.Log(fmt.Sprintf("Task %d started\n", id),
+			"INFO")
 
-	// отдельный контекст heartbeat
-	hbCtx, hbCancel := context.WithCancel(ctx)
+		hbCtx, hbCancel := context.WithCancel(ctx)
 
-	// waitgroup heartbeat goroutine
-	var hbWG sync.WaitGroup
+		var hbWG sync.WaitGroup
+		errCh := make(chan error, 1)
 
-	// канал ошибок heartbeat
-	errCh := make(chan error, 1)
-
-	// старт heartbeat
-	a.startHeartbeat(
-		hbCtx,
-		id,
-		errCh,
-		&hbWG,
-	)
-
-	for _, task := range a.tasks {
-		task(id, a.logger)
-		// проверяем heartbeat
-		a.ensureHeartbeat(
+		a.startHeartbeat(
 			hbCtx,
 			id,
 			errCh,
 			&hbWG,
 		)
-	}
 
-	// останавливаем heartbeat
-	hbCancel()
+		for _, task := range a.tasks {
+			task(id, a.logger)
 
-	// ждём завершения heartbeat goroutines
-	hbWG.Wait()
+			a.ensureHeartbeat(
+				hbCtx,
+				id,
+				errCh,
+				&hbWG,
+			)
+		}
 
-	msg := fmt.Sprintf("Task %d completed\n",
-		id)
-	a.logger.Log(msg, "INFO")
+		hbCancel()
+		hbWG.Wait()
+
+		a.logger.Log(
+			fmt.Sprintf("Task %d completed\n", id),
+			"INFO",
+		)
+	}()
 }
