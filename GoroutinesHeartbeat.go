@@ -10,13 +10,23 @@ import (
 )
 
 type Logger interface {
-	Log(message, level string)
+	Info(message string)
+	Error(message string)
+	Warning(message string)
 }
 
 type defaultLogger struct{}
 
-func (defaultLogger) Log(message, level string) {
-	log.Printf("[DEFAULT] level: %s message: %s\n", level, message)
+func (defaultLogger) Info(message string) {
+	log.Printf("[DEFAULT] level: %s message: %s\n", "INFO", message)
+}
+
+func (defaultLogger) Error(message string) {
+	log.Printf("[DEFAULT] level: %s message: %s\n", "ERROR", message)
+}
+
+func (defaultLogger) Warning(message string) {
+	log.Printf("[DEFAULT] level: %s message: %s\n", "WARNING", message)
 }
 
 type Status interface {
@@ -51,18 +61,12 @@ func (defaultStatus) updateStatus(
 	t time.Time,
 	logger Logger,
 ) {
-	logger.Log(
+	logger.Info(
 		fmt.Sprintf(
 			"[DEFAULT] Task id: %d Task status: %s Task time: %s",
 			id,
 			status,
-			t.Format(time.RFC3339),
-		),
-		"INFO",
-	)
-	if id == 1 {
-		panic(1)
-	}
+			t.Format(time.RFC3339)))
 }
 
 type TaskFunc func(id int, logger Logger)
@@ -138,7 +142,7 @@ func (a *App) startHeartbeat(
 					"heartbeat panic recovered: %v\n%s",
 					err,
 					debug.Stack())
-				a.logger.Log(msg, "ERROR")
+				a.logger.Error(msg)
 
 				errCh <- err
 			}
@@ -162,12 +166,12 @@ func (a *App) ensureHeartbeat(
 			id,
 			err)
 
-		a.logger.Log(msg, "WARNING")
+		a.logger.Warning(msg)
 
 		msg = fmt.Sprintf("Restarting heartbeat for task %d",
 			id)
 
-		a.logger.Log(msg, "WARNING")
+		a.logger.Warning(msg)
 
 		a.startHeartbeat(
 			ctx,
@@ -181,7 +185,7 @@ func (a *App) ensureHeartbeat(
 		msg := fmt.Sprintf("Heartbeat alive for task %d",
 			id)
 
-		a.logger.Log(msg, "INFO")
+		a.logger.Info(msg)
 	}
 }
 
@@ -189,8 +193,7 @@ func (a *App) RunTask(id int) {
 	go func() {
 		ctx := context.Background()
 
-		a.logger.Log(fmt.Sprintf("Task %d started\n", id),
-			"INFO")
+		a.logger.Info(fmt.Sprintf("Task %d started\n", id))
 
 		hbCtx, hbCancel := context.WithCancel(ctx)
 
@@ -218,9 +221,7 @@ func (a *App) RunTask(id int) {
 		hbCancel()
 		hbWG.Wait()
 
-		a.logger.Log(
-			fmt.Sprintf("Task %d completed\n", id),
-			"INFO",
-		)
+		a.logger.Info(
+			fmt.Sprintf("Task %d completed\n", id))
 	}()
 }
