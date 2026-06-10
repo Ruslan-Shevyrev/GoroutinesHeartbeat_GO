@@ -103,9 +103,10 @@ func New(
 func (a *App) taskHeartbeat(
 	ctx context.Context,
 	id int,
+	heartBeatSeconds int,
 ) {
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(time.Duration(heartBeatSeconds) * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -126,7 +127,7 @@ func (a *App) startHeartbeat(
 	id int,
 	errCh chan<- error,
 	wg *sync.WaitGroup,
-
+	heartBeatSeconds int,
 ) {
 	wg.Add(1)
 
@@ -148,7 +149,7 @@ func (a *App) startHeartbeat(
 			}
 		}()
 
-		a.taskHeartbeat(ctx, id)
+		a.taskHeartbeat(ctx, id, heartBeatSeconds)
 	}()
 }
 
@@ -157,6 +158,7 @@ func (a *App) ensureHeartbeat(
 	id int,
 	errCh chan error,
 	wg *sync.WaitGroup,
+	heartBeatSeconds int,
 ) {
 	select {
 
@@ -178,6 +180,7 @@ func (a *App) ensureHeartbeat(
 			id,
 			errCh,
 			wg,
+			heartBeatSeconds,
 		)
 
 	default:
@@ -189,7 +192,7 @@ func (a *App) ensureHeartbeat(
 	}
 }
 
-func (a *App) RunTask(id int) {
+func (a *App) RunTask(id int, heartBeatSeconds int) {
 	go func() {
 		ctx := context.Background()
 
@@ -205,6 +208,7 @@ func (a *App) RunTask(id int) {
 			id,
 			errCh,
 			&hbWG,
+			heartBeatSeconds,
 		)
 
 		for _, task := range a.tasks {
@@ -215,6 +219,7 @@ func (a *App) RunTask(id int) {
 				id,
 				errCh,
 				&hbWG,
+				heartBeatSeconds,
 			)
 		}
 
